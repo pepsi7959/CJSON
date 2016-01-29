@@ -13,7 +13,77 @@ static ejson_obj_t * new_obj(){
 	return (ejson_obj_t *)calloc(1, sizeof(ejson_obj_t));
 }
 
-#define TRIM_SPACE(data,len,i) while(i< len && (data[i] == ' ' || data[i] == '\n')) i++;
+#define JSON_MEMBERS_LIST_APPEND(_first,_item)                              \
+{                                                                           \
+    if ((_first) == NULL)                                                   \
+    {                                                                       \
+        (_first) = (_item)->prev_member = (_item)->next_member = (_item);   \
+    }                                                                       \
+    else                                                                    \
+    {                                                                       \
+        (_item)->prev_member = (_first)->prev_member;                       \
+        (_item)->next_member = (_first);                                    \
+        (_first)->prev_member->next_member = (_item);                       \
+        (_first)->prev_member = (_item);                                    \
+    }                                                                       \
+}
+#define JSON_MEMBERS_LIST_REMOVE(_first,_item)                              \
+{                                                                           \
+   if ((_first) == (_item))                                                 \
+   {                                                                        \
+        if ((_first)->next_member == (_first))                              \
+            (_first) = NULL;                                                \
+        else                                                                \
+        {                                                                   \
+            (_first) = (_item)->next_member;                                \
+            (_item)->next_member->prev_member = (_item)->prev_member;       \
+            (_item)->prev_member->next_member = (_item)->next_member;       \
+        }                                                                   \
+   }                                                                        \
+   else                                                                     \
+   {                                                                        \
+        (_item)->next_member->prev_member = (_item)->prev_member;           \
+        (_item)->prev_member->next_member = (_item)->next_member;           \
+   }                                                                        \
+   (_item)->prev_member = (_item)->next_member = NULL;                      \
+}
+
+#define JSON_CHILD_LIST_APPEND(_first,_item)                                \
+{                                                                           \
+    if ((_first) == NULL)                                                   \
+    {                                                                       \
+        (_first) = (_item)->prev_child = (_item)->next_child = (_item);     \
+    }                                                                       \
+    else                                                                    \
+    {                                                                       \
+        (_item)->prev_child = (_first)->prev_child;                         \
+        (_item)->next_child = (_first);                                     \
+        (_first)->prev_child->next_child = (_item);                         \
+        (_first)->prev_child = (_item);                                     \
+    }                                                                       \
+}
+#define JSON_CHILD_LIST_REMOVE(_first,_item)                                \
+{                                                                           \
+   if ((_first) == (_item))                                                 \
+   {                                                                        \
+        if ((_first)->next_child == (_first))                               \
+            (_first) = NULL;                                                \
+        else                                                                \
+        {                                                                   \
+            (_first) = (_item)->next_child;                                 \
+            (_item)->next_child->prev_child = (_item)->prev_child;          \
+            (_item)->prev_child->next_child = (_item)->next_child;          \
+        }                                                                   \
+   }                                                                        \
+   else                                                                     \
+   {                                                                        \
+        (_item)->next_child->prev_child = (_item)->prev_child;              \
+        (_item)->prev_child->next_child = (_item)->next_child;              \
+   }                                                                        \
+   (_item)->prev_child = (_item)->next_child = NULL;                        \
+}
+
+#define TRIM_SPACE(data,len,i) while(i< len && (data[i] == ' ' || data[i] == '\n' || data[i] == '\t' || data[i] == '\r')) i++;
 
 #define READ_KEY(data,len,i,ch,out)						  \
 	do{													  \
@@ -88,16 +158,10 @@ int _ejson_to_object(const char *data, int len, int *index, ejson_obj_t **out, i
 	*stack_level = *stack_level + 1 ;
 	printf("@@@@@@@@@@@@@@@@ [[[[   %d   ]]]] @@@@@@@@@@@@@@\n", *stack_level);
 	char buff[2048];
-	if( type == 0){
-		ejson_obj_t *n_obj = new_obj();
-		if(n_obj == NULL){
-			return -1;
-		}
-		//APPEND *out = n_obj;
-	}
 
 	while( i < len){
 		//GET KEY
+        buff[0] = '\0';
 		READ_KEY(data, len, i,'"', buff);
 		printf("[key]==> %s\n", buff);
 		TRIM_SPACE(data,len,i);
@@ -106,6 +170,14 @@ int _ejson_to_object(const char *data, int len, int *index, ejson_obj_t **out, i
 		i++;
 		TRIM_SPACE(data,len,i);
 
+       	if( buff[0] != '\0' ){
+            ejson_obj_t *n_obj = new_obj();
+            if(n_obj == NULL){
+                return -1;
+            }
+            //APPEND *out = n_obj;
+        }
+        
 		//GET TYPE or VALUE
 		if( data[i] == '{' ){						//members type
 			i++;
@@ -169,6 +241,15 @@ int _ejson_to_object(const char *data, int len, int *index, ejson_obj_t **out, i
 			i++;
 			if(data[i++] == 'a' && data[i++] =='l' && data[i++] == 's' && data[i++] == 'e'){
 				printf("false\n");
+                TRIM_SPACE(data,len,i)
+				if( data[i] == ',' ){
+					i++;
+					continue;
+				}else if( data[i] == '}' ){
+					*index = i;
+					i++;
+					return 1;
+				}
 			}else{
 				printf("Invalid formet true\n");
 				return -1;
@@ -178,7 +259,15 @@ int _ejson_to_object(const char *data, int len, int *index, ejson_obj_t **out, i
 			i++;
 			if(data[i++] == 'u' && data[i++] =='l' && data[i++] == 'l'){
 				printf("null\n");
-
+				TRIM_SPACE(data,len,i)
+				if( data[i] == ',' ){
+					i++;
+					continue;
+				}else if( data[i] == '}' ){
+					*index = i;
+					i++;
+					return 1;
+				}
 			}else{
 				printf("Invalid formet true\n");
 				return -1;

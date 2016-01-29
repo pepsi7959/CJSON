@@ -11,12 +11,20 @@ int read_file(char *buff, int size ,const char *pathname){
 		return -1;
 	}
 	FILE *file;
-
+	int i = 0;
+	char c;
 	printf("filename : %s \n", pathname);
 	file = fopen(pathname, "r");
-	int r = fscanf(file, "%s", buff);
+	
+	while(i < size){
+		c = fgetc(file);
+		buff[i++] = c;
+		if ( feof(file) ){
+			break;	
+		}
+	}
 	fclose(file);
-	return 0;
+	return i;
 }
 
 int main(int argc, char *argv[]){

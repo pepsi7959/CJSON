@@ -33,8 +33,8 @@
 //obj->next_pair->next_child->
 
 typedef struct __ejson_obj_t{
-	struct __ejson_obj_t *next_pair;
-	struct __ejson_obj_t *prev_pair;
+	struct __ejson_obj_t *next_member;
+	struct __ejson_obj_t *prev_member;
 
 	int type;
 	char name[1024];
