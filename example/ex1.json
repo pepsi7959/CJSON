@@ -1,0 +1,9 @@
+{
+	"data":"1",
+	"data":1,
+	"data":true,
+	"data":false,
+	"data":null,
+	"data":["value1", "value2", "value3"],
+	"data":[{"key1":123},{"key2":456}]
+}
