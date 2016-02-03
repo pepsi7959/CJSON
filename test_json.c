@@ -19,9 +19,33 @@ int read_file(char *buff, int size ,const char *pathname){
     return 0;
 }
 
+int object_create(){
+    
+return 0;
+}
+
+int array_create(){
+    return 0;    
+}
+
+int string_add(){
+    return 0;
+}
+
+int number_add(){
+    return 0;
+}
+
+int boolean_add(){
+    return 0;
+}
+
+
 int main(int argc, char *argv[]){
     int ret = 0;
     ejson_obj_t *obj = NULL;
+    ejson_callback json_cb;
+    
     char error[1024];
     char data[2048];
     if( argc == 2){
@@ -34,7 +58,23 @@ int main(int argc, char *argv[]){
         printf("ejson_to_obj return error[%s]\n", error);
         return 0;
     }
-
+    
+    // Display all
+    ejson_print(obj);
+    
+    getchar();
+    //Set json callback
+    json_cb.object_create = object_create;
+    json_cb.array_create = array_create;
+    json_cb.string_add = string_add;
+    json_cb.number_add = number_add;
+    json_cb.boolean_add = boolean_add;
+    
+    if ( ejson_to_object_get(data, (int)strlen(data), &obj, &json_cb) != 0){
+        printf("ejson_to_obj return error[%s]\n", error);
+        return 0;
+    }
+    
 
     return 0;
 }
