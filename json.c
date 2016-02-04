@@ -2,8 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "json.h"
-
-
+#include "hmap.h"
 #define JSON_LIST_APPEND(_first,_item)                                      \
 {                                                                           \
     if ((_first) == NULL)                                                   \
@@ -42,9 +41,9 @@
 
 #define TRIM_SPACE(data,len,i) while(i< len && (data[i] == ' ' || data[i] == '\n' || data[i] == '\t' || data[i] == '\r')) i++;
 
-#define READ_KEY(data,len,i,ch,out)                       \
+#define READ_KEY(data,len,i,ch,out,bi)                    \
     do{                                                   \
-        int bi = 0;                                       \
+        bi = 0;                                           \
         TRIM_SPACE(data,len,i)                            \
         if (data[i++] == '"'){                            \
             do{                                           \
@@ -63,8 +62,14 @@
         }                                                 \
     }while(0);
 
-#define READ_VALUE(data,len,i,ch,out) READ_KEY(data,len,i,ch,out)
+#define READ_VALUE(data, len, i, ch, out, out_len) READ_KEY(data, len, i, ch, out, out_len)
 
+static int ejson_map_add(ejson_obj_t *json_obj, void *key, int k_len, void *data){
+    if ( hmap_add_tuple_with_data(&(json_obj->map), key, k_len, data, 1) != 0 ){
+        return -1;
+    }
+    return 0;
+}
 
 static ejson_data_t * new_data(){
     
@@ -72,10 +77,11 @@ static ejson_data_t * new_data(){
     if( n_data == NULL){
         return NULL;
     }
-    n_data->next = n_data->prev = NULL;
-    n_data->key[0] = 0;
+    n_data->next     = n_data->prev = NULL;
+    n_data->key[0]   = 0;
     n_data->value[0] = 0;
-    n_data->type = 0;
+    n_data->type     = 0;
+    n_data->values   = NULL;
     
     return n_data;
 }
@@ -87,27 +93,37 @@ static ejson_obj_t * new_obj(char *obj_name){
         return NULL;
     }
     
-    n_obj->next = NULL;
-    n_obj->prev = NULL;
-    n_obj->child = NULL;
-    n_obj->head = NULL;
-    n_obj->data = NULL;
-    n_obj->name[0] = 0;
-    n_obj->value[0] = 0;
-    n_obj->type = 0;
+    n_obj->next      = NULL;
+    n_obj->prev      = NULL;
+    n_obj->child     = NULL;
+    n_obj->head      = NULL;
+    n_obj->data      = NULL;
+    n_obj->object[0] = 0;
+    n_obj->type      = 0;
     strcpy(n_obj->object, obj_name);
+    HMAP_DB *map = NULL;
+    hmap_init(EJSON_KEY_COLUMN_SIZE, &map);
+    if( map == NULL){
+        free(n_obj);
+        return NULL;
+    }
+    n_obj->map = map;
     
     return n_obj;
 }
 
 int _ejson_to_array(char *obj_name, const char *data, int len, int *index, ejson_obj_t **out, int type, int *stack_level, ejson_callback *json_cb, int is_have_child){
-    int i = *index;
-    int have_child = 0;
-    *stack_level = *stack_level + 1 ;
-    printf("--------> Create new arrays %d\n", *stack_level);
-    char buff[2048]; buff[0] = 0;
     
+    printf("--------> Create new arrays %d\n", *stack_level);
+    char buff[2048]; 
+    int i = *index;
+    int have_child      = 0;
+    int buff_len        = 0;
+    int number_of_value = 0;
     ejson_obj_t *n_obj = NULL;
+    
+    *stack_level = *stack_level + 1 ;
+    buff[0] = 0;
     n_obj = new_obj(obj_name);
     
     if( n_obj == NULL ){
@@ -119,9 +135,9 @@ int _ejson_to_array(char *obj_name, const char *data, int len, int *index, ejson
     //NEXT CHILD
     if( !is_have_child ){                               //is_have_child = 0
         if( *out != NULL){
-            n_obj->head = *out;
-            (*out)->child = n_obj;
-            n_obj->next = n_obj->prev = n_obj;
+            n_obj->head     = *out;
+            (*out)->child   = n_obj;
+            n_obj->next     = n_obj->prev = n_obj;
         }else{
             JSON_LIST_APPEND(*out, n_obj)
         }
@@ -159,18 +175,23 @@ int _ejson_to_array(char *obj_name, const char *data, int len, int *index, ejson
             }
         }
         else if ( data[i] == '"'){
-            ejson_data_t *n_data = new_data();
-                if( n_data == NULL ){
-                    return -1;
-            }
             
-            READ_VALUE(data,len,i,'"',buff);
+            READ_VALUE(data, len, i, '"', buff, buff_len);
             printf("---- [value] : %s\n", buff);
 
-            strcpy(n_data->key, "array");
-            strcpy(n_data->value, buff);
-            n_data->type = EJSON_TYPE_STRING;
-            JSON_LIST_APPEND(n_obj->data, n_data);
+            //Add to map
+            char key_name[1024];
+            int index_array = sprintf(key_name, "%d", number_of_value);
+            
+            //Add to map
+            ejson_data_t *json_data = new_data();
+            if( json_data == NULL ){
+                return -1;
+            }
+            strcpy(json_data->value, buff);
+            ejson_map_add(n_obj, key_name, index_array, json_data);
+            number_of_value++;
+            
             TRIM_SPACE(data,len,i)
             if( data[i] == ',' ){
                 i++;
@@ -197,17 +218,22 @@ int _ejson_to_object(char *obj_name,const char *data, int len, int *index, ejson
             JSON_LIST_APPEND(*out, obj);        \
         }                                               \
     }while(0)
- 
-    int i = *index;
-    int have_child = 0;
-    *stack_level = *stack_level + 1 ;
-    printf("--------> Create new object %d\n", *stack_level);
-    char value[2048];value[0] = 0;
-    char key[2048];key[0] = 0;
     
+    printf("--------> Create new object %d\n", *stack_level);
+
+    char value[2048];
+    char key[2048];
+    int key_len     = 0;
+    int value_len   = 0;
+    int have_child  = 0;
+    int i = *index;
     ejson_obj_t *n_obj = NULL;
     
+    value[0]        = 0;
+    key[0]          = 0;
+    *stack_level = *stack_level + 1 ;
     n_obj = new_obj(obj_name);
+    
     if(n_obj == NULL){
         return -1;
     }
@@ -215,9 +241,9 @@ int _ejson_to_object(char *obj_name,const char *data, int len, int *index, ejson
     //NEXT CHILD
     if( !is_have_child ){                                   //is_have_child = 0
         if(*out != NULL){
-            n_obj->head = *out;
-            (*out)->child = n_obj;
-            n_obj->next = n_obj->prev = n_obj;
+            n_obj->head     = *out;
+            (*out)->child   = n_obj;
+            n_obj->next     = n_obj->prev = n_obj;
         }else{
             JSON_LIST_APPEND(*out, n_obj);
         }
@@ -228,26 +254,13 @@ int _ejson_to_object(char *obj_name,const char *data, int len, int *index, ejson
     while( i < len){
         //GET KEY
         value[0] = '\0';
-        READ_KEY(data, len, i,'"', key);
+        READ_KEY(data, len, i,'"', key, key_len);
         printf("---- [key] : %s\n", key);
         TRIM_SPACE(data,len,i);
         printf("---- [delim] = %c\n", data[i]);             //delimeter type
-        
-        ejson_data_t *n_data = new_data();
-        if( n_data == NULL ){
-            return -1;
-        }
-        
-        strcpy(n_data->key, key);
-        
         i++;
         TRIM_SPACE(data,len,i);
 
-         
-        if( n_obj != NULL ){                  
-            strcpy(n_obj->name, key);             
-        }  
-            
         //GET TYPE or VALUE
         if( data[i] == ']' ){                               //end of arrays
                 i++;
@@ -285,19 +298,20 @@ int _ejson_to_object(char *obj_name,const char *data, int len, int *index, ejson
             }
         }
         else if( data[i] == '"' ){                      //string type
-            READ_VALUE(data,len,i,'"', value);
+            READ_VALUE(data, len, i, '"', value, value_len);
             printf("---- [value] : %s\n", value);
             
             if( json_cb != NULL && json_cb->string_add != NULL ) {
                 json_cb->string_add(n_obj, key, value); 
             }
-            
-            strcpy(n_obj->value, value);   
-            strcpy(n_data->value, value);
-            n_data->type = EJSON_TYPE_STRING;
-            JSON_LIST_APPEND(n_obj->data, n_data);
-            //ADD_VALUE(n_obj, key, buff, 0);
-            
+
+            //Add to map
+            ejson_data_t *json_data = new_data();
+            if( json_data == NULL ){
+                return -1;
+            }
+            strcpy(json_data->value, value);
+            ejson_map_add(n_obj, key, key_len, json_data);
             
             TRIM_SPACE(data,len,i)
             if( data[i] == ',' ){
@@ -314,9 +328,6 @@ int _ejson_to_object(char *obj_name,const char *data, int len, int *index, ejson
             i++;
             if(data[i++] == 'r' && data[i++] =='u' && data[i++] == 'e'){
                 printf("~~~~ [value] : true\n");
-                strcpy(n_data->value, "true");
-                n_data->type = EJSON_TYPE_TRUE;
-                JSON_LIST_APPEND(n_obj->data, n_data);
                 TRIM_SPACE(data,len,i)
                 if( data[i] == ',' ){
                     i++;
@@ -335,9 +346,6 @@ int _ejson_to_object(char *obj_name,const char *data, int len, int *index, ejson
             i++;
             if(data[i++] == 'a' && data[i++] =='l' && data[i++] == 's' && data[i++] == 'e'){
                 printf("~~~~ [value] : false\n");
-                strcpy(n_data->value, "false");
-                n_data->type = EJSON_TYPE_FALSE;
-                JSON_LIST_APPEND(n_obj->data, n_data);
                 TRIM_SPACE(data,len,i)
                 if( data[i] == ',' ){
                     i++;
@@ -356,9 +364,6 @@ int _ejson_to_object(char *obj_name,const char *data, int len, int *index, ejson
             i++;
             if(data[i++] == 'u' && data[i++] =='l' && data[i++] == 'l'){
                 printf("~~~~ [value] : null\n");
-                strcpy(n_data->value, "null");
-                n_data->type = EJSON_TYPE_NULL;
-                JSON_LIST_APPEND(n_obj->data, n_data);
                 TRIM_SPACE(data,len,i)
                 if( data[i] == ',' ){
                     i++;
@@ -384,9 +389,6 @@ int _ejson_to_object(char *obj_name,const char *data, int len, int *index, ejson
             }
             value[bi] = 0;
             printf("~~~~ [value] : %s\n", value);
-            strcpy(n_data->value, value);
-            n_data->type = EJSON_TYPE_NUMBER;
-            JSON_LIST_APPEND(n_obj->data, n_data);
             TRIM_SPACE(data,len,i)
             if( data[i] == ',' ){
                 i++;
@@ -423,6 +425,7 @@ ejson_to_object_get(const char *data, int len, ejson_obj_t **out, ejson_callback
     }
     return 0;
 }
+
 int ejson_to_object(const char *data, int len, ejson_obj_t **out){
     printf("data: %s\n", data);
     int i = 0;
@@ -457,6 +460,7 @@ int _ejson_print(ejson_obj_t *obj, int limit ,int *level){
     
     while(member){
         printf("[%d]====>obj : %s\n", *level, member->object);
+        hmap_print_list(member->map);
         ejson_print_data( member->data );
         if( member->child ){
             *level = *level + 1;
@@ -473,8 +477,32 @@ int _ejson_print(ejson_obj_t *obj, int limit ,int *level){
      *level = *level - 1;
     return 0;
 }
+
 int ejson_print(ejson_obj_t *obj){
     int level = 0;
     int limit = 50;
      _ejson_print(obj, limit, &level);
+}
+
+int _ejson_destroy(ejson_obj_t *obj){
+    if( obj == NULL){
+        return -1;
+    }
+    ejson_obj_t *t_obj = obj;
+    
+    while(t_obj){
+        if(t_obj->child){
+            _ejson_destroy(t_obj->child);
+        }
+        JSON_LIST_REMOVE(obj,t_obj);
+        hmap_destroy(&(t_obj->map));
+        free(t_obj);
+        t_obj = obj;
+    }
+    
+    return 0;
+}
+
+int ejson_destroy(ejson_obj_t *obj){
+    return _ejson_destroy(obj);
 }

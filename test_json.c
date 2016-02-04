@@ -1,10 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "json.h"
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+
+#include "hmap.h"
+#include "json.h"
 
 int read_file(char *buff, int size ,const char *pathname){
     if( buff == NULL){
@@ -59,8 +61,17 @@ int main(int argc, char *argv[]){
         return 0;
     }
     
-    // Display all
-    ejson_print(obj);
+    hmap_print_list(obj->map);
+    TUPLE *f_tuple;
+    hmap_search(obj->map, "key1", 4, &f_tuple); 
+    if( f_tuple != NULL ){
+        printf("find key1 :%s\n", (char *)f_tuple->data);
+        
+    }
+    
+   // Display all
+   ejson_print(obj);
+   ejson_destroy(obj);
 /*
 	getchar();
     //Set json callback

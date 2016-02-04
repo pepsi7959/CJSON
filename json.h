@@ -1,5 +1,8 @@
 #ifndef __EJSON_H
 #define __EJSON_H
+#include "hmap.h"
+
+#define EJSON_KEY_COLUMN_SIZE   1024
 
 //object
 // - {}
@@ -48,11 +51,11 @@ typedef struct __ejson_obj_t{
     struct __ejson_obj_t *head;
     
     struct __ejson_data_t *data;
+    HMAP_DB *map;
     
     int type;
     char object[1024];
-    char name[1024];
-    char value[1024];
+
 
 }ejson_obj_t;
 
@@ -63,6 +66,7 @@ typedef struct __ejson_data_t{
     int type;
     char key[1024];
     char value[1024];
+    void *values;
 }ejson_data_t;
 
 
@@ -78,5 +82,6 @@ int ejson_to_string(char **data,int len, ejson_obj_t *out);
 int ejson_to_object(const char *data, int len, ejson_obj_t **out);
 int ejson_to_object_get(const char *data, int len, ejson_obj_t **out, ejson_callback *json_cb);
 int ejson_print(ejson_obj_t *obj);
+int ejson_destroy(ejson_obj_t *obj);
 
 #endif
