@@ -61,8 +61,8 @@ int main(int argc, char *argv[]){
     
     // Display all
     ejson_print(obj);
-    
-    getchar();
+/*
+	getchar();
     //Set json callback
     json_cb.object_create = object_create;
     json_cb.array_create = array_create;
@@ -75,7 +75,7 @@ int main(int argc, char *argv[]){
         return 0;
     }
     
-
+*/
     return 0;
 }
 
