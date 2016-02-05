@@ -64,11 +64,37 @@
 
 #define READ_VALUE(data, len, i, ch, out, out_len) READ_KEY(data, len, i, ch, out, out_len)
 
+static const char *ejson_type_to_string(int json_type){
+    switch( json_type ){
+        case EJSON_TYPE_STRING:
+            return "STRING";
+        case EJSON_TYPE_NUMBER:
+            return "NUMBER";
+        case EJSON_TYPE_OBJECT:
+            return "OBJECT";
+        case EJSON_TYPE_ARRAY:
+            return "ARRAY";
+        case EJSON_TYPE_TRUE:
+            return "TRUE";
+        case EJSON_TYPE_FALSE:
+            return "FALSE";
+        case EJSON_TYPE_NULL:
+            return "NULL";
+        default :
+            return "UNKOWN";
+    }
+}
+
 static int ejson_map_add(ejson_obj_t *json_obj, void *key, int k_len, void *data){
     if ( hmap_add_tuple_with_data(&(json_obj->map), key, k_len, data, 1) != 0 ){
         return -1;
     }
     return 0;
+}
+
+static void ejson_data_print( void *data){
+    ejson_data_t *json_data  = (ejson_data_t*) data;
+    printf("data[%s]\n", json_data->value);
 }
 
 static ejson_data_t * new_data(){
@@ -82,6 +108,7 @@ static ejson_data_t * new_data(){
     n_data->value[0] = 0;
     n_data->type     = 0;
     n_data->values   = NULL;
+    n_data->print    = ejson_data_print;  
     
     return n_data;
 }
@@ -310,6 +337,7 @@ int _ejson_to_object(char *obj_name,const char *data, int len, int *index, ejson
             if( json_data == NULL ){
                 return -1;
             }
+            json_data->type = EJSON_TYPE_STRING;
             strcpy(json_data->value, value);
             ejson_map_add(n_obj, key, key_len, json_data);
             
@@ -328,6 +356,14 @@ int _ejson_to_object(char *obj_name,const char *data, int len, int *index, ejson
             i++;
             if(data[i++] == 'r' && data[i++] =='u' && data[i++] == 'e'){
                 printf("~~~~ [value] : true\n");
+                //Add to map
+                ejson_data_t *json_data = new_data();
+                if( json_data == NULL ){
+                    return -1;
+                }
+                json_data->type = EJSON_TYPE_TRUE;
+                strcpy(json_data->value, "true");
+                ejson_map_add(n_obj, key, key_len, json_data);
                 TRIM_SPACE(data,len,i)
                 if( data[i] == ',' ){
                     i++;
@@ -346,6 +382,14 @@ int _ejson_to_object(char *obj_name,const char *data, int len, int *index, ejson
             i++;
             if(data[i++] == 'a' && data[i++] =='l' && data[i++] == 's' && data[i++] == 'e'){
                 printf("~~~~ [value] : false\n");
+                //Add to map
+                ejson_data_t *json_data = new_data();
+                if( json_data == NULL ){
+                    return -1;
+                }
+                json_data->type = EJSON_TYPE_FALSE;
+                strcpy(json_data->value, "false");
+                ejson_map_add(n_obj, key, key_len, json_data);
                 TRIM_SPACE(data,len,i)
                 if( data[i] == ',' ){
                     i++;
@@ -364,6 +408,14 @@ int _ejson_to_object(char *obj_name,const char *data, int len, int *index, ejson
             i++;
             if(data[i++] == 'u' && data[i++] =='l' && data[i++] == 'l'){
                 printf("~~~~ [value] : null\n");
+                //Add to map
+                ejson_data_t *json_data = new_data();
+                if( json_data == NULL ){
+                    return -1;
+                }
+                json_data->type = EJSON_TYPE_NULL;
+                strcpy(json_data->value, "null");
+                ejson_map_add(n_obj, key, key_len, json_data);
                 TRIM_SPACE(data,len,i)
                 if( data[i] == ',' ){
                     i++;
@@ -389,6 +441,14 @@ int _ejson_to_object(char *obj_name,const char *data, int len, int *index, ejson
             }
             value[bi] = 0;
             printf("~~~~ [value] : %s\n", value);
+            //Add to map
+            ejson_data_t *json_data = new_data();
+            if( json_data == NULL ){
+                return -1;
+            }
+            json_data->type = EJSON_TYPE_NUMBER;
+            strcpy(json_data->value, value);
+            ejson_map_add(n_obj, key, key_len, json_data);
             TRIM_SPACE(data,len,i)
             if( data[i] == ',' ){
                 i++;
@@ -442,14 +502,17 @@ int ejson_to_object(const char *data, int len, ejson_obj_t **out){
     return 0;
 }
 
-int ejson_print_data( ejson_data_t *data ){
-    ejson_data_t *p_data = data;
-    while(p_data){
-        printf("    ----> type : %d\n", p_data->type);
-        printf("    ----> name : %s\n", p_data->key);
+int ejson_print_data( HMAP_DB *map){
+    TUPLE *t_list_tuple = map->list_tuple;
+    ejson_data_t *p_data = NULL;
+    while(t_list_tuple){
+        p_data = (ejson_data_t *)(t_list_tuple->data);
+        
+        printf("    ====> type : %s\n", ejson_type_to_string(p_data->type) );
+        printf("    ----> name : %s\n", t_list_tuple->key);
         printf("    ~~~~> value : %s\n", p_data->value);
-        p_data = p_data->next;
-        if(p_data == data)
+        t_list_tuple = t_list_tuple->next;
+        if(t_list_tuple == map->list_tuple)
             return 0;
     }
     return  -1;
@@ -460,8 +523,7 @@ int _ejson_print(ejson_obj_t *obj, int limit ,int *level){
     
     while(member){
         printf("[%d]====>obj : %s\n", *level, member->object);
-        hmap_print_list(member->map);
-        ejson_print_data( member->data );
+        ejson_print_data( member->map );
         if( member->child ){
             *level = *level + 1;
             if( (*level) > limit)

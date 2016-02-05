@@ -42,6 +42,66 @@ int boolean_add(){
     return 0;
 }
 
+int json_object_d02_connect_get(ejson_obj_t * json_obj){
+    ejson_obj_t *t_json_obj = json_obj->child;
+    TUPLE *f_tuple          = NULL;
+    while(t_json_obj){
+       //find d02 connection
+       hmap_search(t_json_obj->map, "key", 3, &f_tuple); 
+        if( f_tuple != NULL ){
+            printf("        - connection : %s\n", ((ejson_data_t *)(f_tuple->data))->value);
+        }
+        
+        hmap_search(t_json_obj->map, "value", 5, &f_tuple); 
+        if( f_tuple != NULL ){
+            printf("        - connection : %s\n", ((ejson_data_t *)(f_tuple->data))->value);
+        }
+        
+        t_json_obj = t_json_obj->next;
+        if(t_json_obj == json_obj->child)
+            break;
+    }
+    return 0; 
+}
+
+int json_object_d02_get(ejson_obj_t * json_obj){
+    ejson_obj_t *t_json_obj = json_obj;
+    TUPLE *f_tuple          = NULL;
+    while(t_json_obj){
+       //find d02 connection
+       hmap_search(t_json_obj->map, "key", 3, &f_tuple); 
+        if( f_tuple != NULL ){
+            printf("    - d02 name : %s\n", ((ejson_data_t *)(f_tuple->data))->value);
+            json_object_d02_connect_get(t_json_obj->child);
+        }
+        
+        t_json_obj = t_json_obj->next;
+        if(t_json_obj == json_obj)
+            break;
+    }
+    return 0;
+}
+
+int json_object_cluster_get(ejson_obj_t * json_obj){
+    ejson_obj_t *t_json_obj = json_obj;
+    TUPLE *f_tuple          = NULL;
+    while( t_json_obj ){
+        
+       //find cluster
+       hmap_search(t_json_obj->map, "key", 3, &f_tuple); 
+        if( f_tuple != NULL ){
+            printf("cluster name : %s\n", ((ejson_data_t *)(f_tuple->data))->value);
+            //find d02
+            json_object_d02_get(t_json_obj->child->child);
+        }
+        
+        t_json_obj = t_json_obj->next;
+        if(t_json_obj == json_obj)
+            break;
+    }
+    return 0;
+}
+
 
 int main(int argc, char *argv[]){
     int ret = 0;
@@ -49,9 +109,9 @@ int main(int argc, char *argv[]){
     ejson_callback json_cb;
     
     char error[1024];
-    char data[2048];
+    char data[40960];
     if( argc == 2){
-        read_file(data, 2048, argv[1]);
+        read_file(data, 40960, argv[1]);
     }else{
         sprintf(data, "{\"key1\":\"value1\",\"key1.2\":[\"v1\",\"v2\",{\"A\":\"AV\"}],\"key2\":{\"key3\":\"value3\"}}");
     }
@@ -61,16 +121,19 @@ int main(int argc, char *argv[]){
         return 0;
     }
     
-    hmap_print_list(obj->map);
-    TUPLE *f_tuple;
-    hmap_search(obj->map, "key1", 4, &f_tuple); 
-    if( f_tuple != NULL ){
-        printf("find key1 :%s\n", (char *)f_tuple->data);
-        
-    }
+    //hmap_print_list(obj->map);
+    TUPLE *f_tuple = NULL;
     
    // Display all
    ejson_print(obj);
+   hmap_search(obj->child->child->child->next->map, "key", 3, &f_tuple); 
+   printf("object name : %s\n", obj->object);
+    if( f_tuple != NULL ){
+        printf("find key :%s\n", ((ejson_data_t *)(f_tuple->data))->value);
+        
+    }
+    
+   json_object_cluster_get(obj->child->child->child);
    ejson_destroy(obj);
 /*
 	getchar();

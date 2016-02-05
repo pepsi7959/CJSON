@@ -1,0 +1,3 @@
+[submodule "hash_map"]
+	path = hash_map
+	url = https://github.com/pepsi7959/hash_map.git

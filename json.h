@@ -41,7 +41,9 @@ enum __ejson_type {
     EJSON_TYPE_ARRAY,
     EJSON_TYPE_TRUE,
     EJSON_TYPE_FALSE,
-    EJSON_TYPE_NULL
+    EJSON_TYPE_NULL,
+    
+    EJSON_TYPE_UNKOWN
 };
 
 typedef struct __ejson_obj_t{
@@ -67,6 +69,7 @@ typedef struct __ejson_data_t{
     char key[1024];
     char value[1024];
     void *values;
+    void (*print)();
 }ejson_data_t;
 
 
