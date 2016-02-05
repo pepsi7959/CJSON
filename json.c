@@ -127,6 +127,7 @@ static ejson_obj_t * new_obj(char *obj_name){
     n_obj->data      = NULL;
     n_obj->object[0] = 0;
     n_obj->type      = 0;
+	n_obj->map       = NULL;
     strcpy(n_obj->object, obj_name);
     HMAP_DB *map = NULL;
     hmap_init(EJSON_KEY_COLUMN_SIZE, &map);
